@@ -93,8 +93,8 @@ class World {
     // the window size 'winX' and 'winY' and use the world coordinates
     // of the window edges (defined above).
 
-    float worldX = 0.02;
-    float worldY = -0.9;
+    float worldX = ((2.0f * pos.x) / winX) - 1.0f;
+    float worldY = ((-2.0f * pos.y) / winY) + 1.0f;
 
     player->moveTo( vec2( worldX, worldY ) );
   }

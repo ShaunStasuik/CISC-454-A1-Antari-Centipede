@@ -7,29 +7,26 @@
 #include "world.h"
 #include "strokefont.h"
 
+GLFWwindow *window;
 
-GLFWwindow* window;
+GPUProgram *gpuProg; // pointer to GPU program object
 
-GPUProgram *gpuProg;		// pointer to GPU program object
-
-World *world;			// the world, including centipede, mushrooms, etc.
+World *world; // the world, including centipede, mushrooms, etc.
 
 bool pauseGame = false;
-float speedMultiplier = 1.0;	// Press + or - to change the centipede speed through this variable
+float speedMultiplier = 1.0; // Press + or - to change the centipede speed through this variable
 
-int screenWidth  = 900; //1265*1;
-int screenHeight = 1200; //800*1;
-
+int screenWidth = 900;   // 1265*1;
+int screenHeight = 1200; // 800*1;
 
 // Shaders for the world objects
 //
 // These shaders take a 2D position as attribute 0 and an RGB colour
 // as attribute 1.
 
-
 char *mainVertexShader =
 
-  R"XX(
+    R"XX(
   #version 300 es
 
   layout (location = 0) in vec2 position;
@@ -46,10 +43,9 @@ char *mainVertexShader =
 
 )XX";
 
+char *mainFragmentShader =
 
-char *mainFragmentShader = 
-
-  R"XX(
+    R"XX(
   #version 300 es
 
   in mediump vec3 colour;
@@ -63,36 +59,35 @@ char *mainFragmentShader =
 
 )XX";
 
-
-
 // Handle a keypress
 
-
-void keyCallback( GLFWwindow *w, int key, int scancode, int action, int mods )
-
+void keyCallback(GLFWwindow *w, int key, int scancode, int action, int mods)
 {
-  if (action == GLFW_PRESS) {
-    
-    if (key == GLFW_KEY_ESCAPE)	// quit upon ESC
+  if (action == GLFW_PRESS)
+  {
+
+    if (key == GLFW_KEY_ESCAPE) // quit upon ESC
       exit(0);
 
-    else if (key == 'P')	// p = pause
+    else if (key == 'P') // p = pause
       pauseGame = !pauseGame;
 
-    else if (key == 'S') {	// s = start again
-      if (world->gameOver) {
-	pauseGame = false;
-	speedMultiplier = 1;
-	world->initWorld( window );
+    else if (key == 'S')
+    { // s = start again
+      if (world->gameOver)
+      {
+        pauseGame = false;
+        speedMultiplier = 1;
+        world->initWorld(window);
       }
-
-    } else if (key == '=')	// + = pause
+    }
+    else if (key == '=') // + = pause
       speedMultiplier *= 2;
 
-    else if (key == '-')	// - = slower
+    else if (key == '-') // - = slower
       speedMultiplier /= 2;
 
-    else if (key == 'H')	// h = help
+    else if (key == 'H') // h = help
       cout << "p - pause (toggle)" << endl;
 
     else if (key == ' ')
@@ -100,156 +95,145 @@ void keyCallback( GLFWwindow *w, int key, int scancode, int action, int mods )
   }
 }
 
-
 // Error callback
 
-void errorCallback( int error, const char* description )
-
+void errorCallback(int error, const char *description)
 {
   cerr << "Error: " << description << endl;
 }
 
-
-
 // Window resize callback
 
-void windowSizeCallback( GLFWwindow *window, int width, int height )
-
+void windowSizeCallback(GLFWwindow *window, int width, int height)
 {
   int fb_width, fb_height;
 
-  glfwGetFramebufferSize( window, &fb_width, &fb_height );
+  glfwGetFramebufferSize(window, &fb_width, &fb_height);
 
-  glViewport( 0, 0, fb_width, fb_height );
+  glViewport(0, 0, fb_width, fb_height);
 }
-
-
 
 // Mouse motion callback
 
-void mousePositionCallback( GLFWwindow* window, double xpos, double ypos )
-  
+void mousePositionCallback(GLFWwindow *window, double xpos, double ypos)
 {
-  world->playerMove( vec2( xpos, ypos ) );
+  world->playerMove(vec2(xpos, ypos));
 }
-
-
 
 // Main program
 
-
-int main( int argc, char **argv )
+int main(int argc, char **argv)
 
 {
   // Set up GLFW
 
-  if (!glfwInit()) {
+  if (!glfwInit())
+  {
     cerr << "GLFW failed to initialize" << endl;
     return 1;
   }
-  
-  glfwSetErrorCallback( errorCallback );
-  
+
+  glfwSetErrorCallback(errorCallback);
+
   // Open window
 
 #ifdef MACOS
-  glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR, 3 );
-  glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR, 2 );
-  glfwWindowHint( GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE );
-  glfwWindowHint( GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE );
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #else
-  glfwWindowHint( GLFW_CLIENT_API, GLFW_OPENGL_ES_API );
-  glfwWindowHint( GLFW_CONTEXT_VERSION_MAJOR, 3 );
-  glfwWindowHint( GLFW_CONTEXT_VERSION_MINOR, 0 );
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 #endif
 
-  window = glfwCreateWindow( screenWidth, screenHeight, "CENTIPEDE", NULL, NULL);
-  
-  if (!window) {
+  window = glfwCreateWindow(screenWidth, screenHeight, "CENTIPEDE", NULL, NULL);
+
+  if (!window)
+  {
     glfwTerminate();
     cerr << "GLFW failed to create a window" << endl;
 
 #ifdef MACOS
     const char *descrip;
-    int code = glfwGetError( &descrip );
+    int code = glfwGetError(&descrip);
     cerr << "GLFW code:  " << code << endl;
     cerr << "GLFW error: " << descrip << endl;
 #endif
-    
+
     return 1;
   }
 
-  glfwMakeContextCurrent( window );
-  glfwSwapInterval( 1 );
-  
+  glfwMakeContextCurrent(window);
+  glfwSwapInterval(1);
+
   // Set OpenGL function bindings
 
-  gladLoadGLLoader( (GLADloadproc) glfwGetProcAddress );
+  gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
 
   // Set up callbacks
 
-  glfwSetKeyCallback( window, keyCallback );
-  glfwSetWindowSizeCallback( window, windowSizeCallback );
-  glfwSetCursorPosCallback( window, mousePositionCallback );
+  glfwSetKeyCallback(window, keyCallback);
+  glfwSetWindowSizeCallback(window, windowSizeCallback);
+  glfwSetCursorPosCallback(window, mousePositionCallback);
 
   // Set up shaders
 
   gpuProg = new GPUProgram();
-  gpuProg->init( mainVertexShader, mainFragmentShader, "main()" );
+  gpuProg->init(mainVertexShader, mainFragmentShader, "main()");
 
   // Set up fonts
-  
+
   setupStrokeStrings();
 
   // Set up world
 
-  world = new World( window );
+  world = new World(window);
 
   // Turn off cursor, as the player icon will be used instead.  Also,
   // position the cursor on the player.
 
-  glfwSetInputMode( window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN );
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
   float mouseX = (INIT_PLAYER_POS.x - world->l) / (world->r - world->l) * screenWidth;
   float mouseY = (INIT_PLAYER_POS.y - world->t) / (world->b - world->t) * screenHeight;
 
-  glfwSetCursorPos( window, mouseX, mouseY );
+  glfwSetCursorPos(window, mouseX, mouseY);
 
   // Run
 
   chrono::system_clock::time_point prevTime = chrono::system_clock::now();
 
-  while (!glfwWindowShouldClose( window )) {
+  while (!glfwWindowShouldClose(window))
+  {
 
     // Find elapsed time since last render
 
-    float elapsedTime = chrono::duration_cast<chrono::milliseconds>( chrono::system_clock::now() - prevTime ).count() / 1000.0;
+    float elapsedTime = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now() - prevTime).count() / 1000.0;
 
     prevTime = chrono::system_clock::now();
 
     // Update the world state
 
-    if (!pauseGame) 
-      world->updateState( elapsedTime );
+    if (!pauseGame)
+      world->updateState(elapsedTime);
 
     // Display the world
 
     world->draw();
 
-    glfwSwapBuffers( window );
-    
+    glfwSwapBuffers(window);
+
     // Check for new events
 
     glfwPollEvents();
   }
 
-  glfwDestroyWindow( window );
+  glfwDestroyWindow(window);
   glfwTerminate();
   return 0;
 }
-
-
-
 
 // A bug in some GL* library in Ubuntu 14.04 requires that libpthread
 // be forced to load.  The code below accomplishes this (from MikeMx7f
