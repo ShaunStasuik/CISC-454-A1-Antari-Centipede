@@ -12,19 +12,22 @@ class Mushroom {
 
   // VAOs for drawing ("static", so these are shared by all Mushroom instances)
 
-  static GLuint VAO;
+  static seq<DrawBuffers> mushroomStates;
+
+  //static GLuint VAO;
   
  public:
 
   vec2 pos;
   int  damage;
 
-  Mushroom( vec2 _pos ) {
+  Mushroom( vec2 _pos )
+  {
 
     pos    = _pos;
     damage = 0;
 
-    if (VAO == 0)
+    if (mushroomStates.size() == 0)
       generateVAOs();
   }
 
