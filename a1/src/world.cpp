@@ -134,8 +134,6 @@ void World::updateState(float elapsedTime)
     // remove spider so it doesn't keep colliding during the pause
     delete spider;
     spider = NULL;
-
-    return;
   }
 
   // Move dart and check for it hitting something.  (Do this here as
