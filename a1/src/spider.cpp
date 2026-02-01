@@ -1,4 +1,3 @@
-// spider.cpp
 #include "spider.h"
 #include "main.h"
 #include "worldDefs.h"
@@ -9,22 +8,14 @@
 extern GLFWwindow *window;
 #define LINE_HALFWIDTH_IN_PIXELS 2.0f
 
-// If you didn't put these in worldDefs.h, keep them here instead:
-// #define SPIDER_RADIUS        (0.35f * ROW_SPACING)
-// #define SPIDER_SPEED_X       (0.60f)
-// #define SPIDER_SPEED_Y       (0.40f)
-// #define SPIDER_Y_MIN         (-1.0f + 1.5f*ROW_SPACING)
-// #define SPIDER_Y_MAX         (WORLD_BOTTOM_ROW + 2.0f*ROW_SPACING)
-
 static const vec3 SPIDER_BODY_COL(0.95f, 0.30f, 0.30f);
 static const vec3 SPIDER_LEG_COL(0.70f, 0.55f, 0.20f);
 
 DrawBuffers *Spider::db = NULL;
 
-// simple random in [0,1]
 static float rand01() { return (float)rand() / (float)RAND_MAX; }
 
-// thick segment like your mushroom/centipede code
+// thick segment like mushroom/centipede
 static void addThickSegment(seq<vec2> &pos, seq<vec3> &col, vec2 a, vec2 b, float hw, vec3 c)
 {
     vec2 d = (b - a).normalize();

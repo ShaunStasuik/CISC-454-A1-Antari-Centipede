@@ -1,4 +1,3 @@
-// spider.h
 #pragma once
 
 #include "headers.h"
@@ -19,7 +18,7 @@ public:
 
   static void generateVAOs();
 
-  // Update position + behavior
+  // Update position and behavior
   void update(float elapsedTime);
 
   // Draw at pos

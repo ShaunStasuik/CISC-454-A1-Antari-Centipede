@@ -149,7 +149,7 @@ void Mushroom::generateVAOs()
   vec3 black = vec3(0.0f, 0.0f, 0.0f);
 
   {
-    // ---- VAO/VBO setup (exactly like Dart) ----
+    // VAO/VBO setup (like Dart) 
     GLuint VAO;
     glGenVertexArrays(1, &VAO);
     glBindVertexArray(VAO);
@@ -173,7 +173,7 @@ void Mushroom::generateVAOs()
     seq<vec3> colours;
     GLuint offset;
 
-    // ---- 1) STEM FILL (rectangle fan) ----
+    // 1) STEM FILL (rectangle fan)
     {
       float x0 = -0.5f * stemW;
       float x1 = 0.5f * stemW;
@@ -197,7 +197,7 @@ void Mushroom::generateVAOs()
       db->count.add(positions.size() - offset);
     }
 
-    // ---- 2) CAP FILL (semi-circle fan) ----
+    // 2) CAP FILL (semi-circle fan)
     {
       offset = positions.size();
       addSemiCircleFan(positions, colours, vec2(0.0f, capCY), capR, capCol);
@@ -207,7 +207,7 @@ void Mushroom::generateVAOs()
       db->count.add(positions.size() - offset);
     }
 
-    // ---- 3) STEM OUTLINE (3 edges only: bottom, left, right) ----
+    // 3) STEM OUTLINE (3 edges only: bottom, left, right) 
     // No top edge so you don't get an extra cyan band where cap meets stem.
     {
       float x0 = -0.5f * stemW;
@@ -237,7 +237,7 @@ void Mushroom::generateVAOs()
       db->count.add(positions.size() - offset);
     }
 
-    // ---- 4) CAP OUTLINE (thick arc strip) ----
+    // 4) CAP OUTLINE (thick arc strip)
     {
       offset = positions.size();
 
@@ -251,13 +251,11 @@ void Mushroom::generateVAOs()
       db->count.add(positions.size() - offset);
     }
 
-    // ---- Upload interleaved data to the VBO ----
+    // Upload interleaved data to the VBO
     uploadInterleavedToBoundVBO(VBO, positions, colours);
   }
 
-  // ============================================================
-  // (B) Build the MASK VAO + DrawBuffers (maskDb)
-  // ============================================================
+  // Build the MASK VAO and DrawBuffers (maskDb)
   {
     GLuint VAO;
     glGenVertexArrays(1, &VAO);
@@ -320,7 +318,7 @@ void Mushroom::draw(mat4 &worldToViewTransform)
     db->draw();
   }
 
-  // 2) Draw damage mask (black rectangle coming from below).
+  // Draw damage mask (black rectangle coming from below).
   float maskFrac = 0.0f;
 
   if (MUSH_MAX_DAMAGE > 0)

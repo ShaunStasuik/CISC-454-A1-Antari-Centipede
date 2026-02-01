@@ -88,7 +88,7 @@ void World::updateState(float elapsedTime)
   for (int i = 0; i < centipedes.size(); i++)
     centipedes[i]->updatePose(elapsedTime);
 
-  // Spawn spider occasionally (only one at a time for simplicity)
+  // Spawn spider occasionally (only one at a time)
   spiderSpawnTimer -= elapsedTime;
   if (!spider && spiderSpawnTimer <= 0.0f)
   {
@@ -104,7 +104,7 @@ void World::updateState(float elapsedTime)
 
     spider = new Spider(vec2(x, y), vec2(vx, vy));
 
-    // next spawn in ~[6..12] seconds AFTER this one dies/leaves
+    // next spawn in ~[6..12] seconds after this one dies or leaves
     spiderSpawnTimer = 6.0f + 6.0f * ((float)rand() / RAND_MAX);
   }
 
@@ -112,7 +112,7 @@ void World::updateState(float elapsedTime)
   {
     spider->update(elapsedTime * speedMultiplier);
 
-    // If it goes off left/right, remove it
+    // If it goes off to the left or right, remove it
     if (spider->pos.x < WORLD_LEFT_EDGE - 4 * COL_SPACING ||
         spider->pos.x > WORLD_RIGHT_EDGE + 4 * COL_SPACING)
     {
@@ -136,8 +136,7 @@ void World::updateState(float elapsedTime)
     spider = NULL;
   }
 
-  // Move dart and check for it hitting something.  (Do this here as
-  // it requires operating on World components.)
+  // Move dart and check for it hitting something.
 
   for (int i = 0; i < darts.size(); i++)
   {
@@ -166,8 +165,6 @@ void World::updateState(float elapsedTime)
     {
 
       // See if this mushroom will be hit within the next time step
-      // (approximated using the distance travelled in the last time
-      // step)
 
       vec2 v = closestMush->pos - prevPos;
       float distAlongLine = v.x * dir.x + v.y * dir.y;
