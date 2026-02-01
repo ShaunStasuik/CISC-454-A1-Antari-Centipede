@@ -4,7 +4,7 @@ CXXFLAGS = -g -std=c++11 -Wall -Wno-write-strings -Wno-parentheses -DLINUX #-pth
 vpath %.cpp ../src
 vpath %.c   ../src/glad/src
 
-OBJS = main.o world.o centipede.o mushroom.o player.o dart.o linalg.o gpuProgram.o strokefont.o fg_stroke.o glad.o
+OBJS = main.o world.o centipede.o mushroom.o player.o dart.o spider.o linalg.o gpuProgram.o strokefont.o fg_stroke.o glad.o
 
 EXEC = centipede
 
