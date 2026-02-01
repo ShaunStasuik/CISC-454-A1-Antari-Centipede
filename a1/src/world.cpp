@@ -26,6 +26,9 @@ void World::initWorld(GLFWwindow *w)
   livesRemaining = INIT_LIVES_REMAINING;
 
   highlightMushroom = NULL;
+  // SPIDER CODE.
+  spider = NULL;
+  spiderSpawnTimer = 3.0f; // spawn after a few seconds
 
   // Random mushrooms
 
@@ -85,6 +88,56 @@ void World::updateState(float elapsedTime)
   for (int i = 0; i < centipedes.size(); i++)
     centipedes[i]->updatePose(elapsedTime);
 
+  // Spawn spider occasionally (only one at a time for simplicity)
+  spiderSpawnTimer -= elapsedTime;
+  if (!spider && spiderSpawnTimer <= 0.0f)
+  {
+
+    // choose entry side
+    bool fromLeft = (rand() % 2) == 0;
+
+    float x = fromLeft ? (WORLD_LEFT_EDGE - 2 * COL_SPACING) : (WORLD_RIGHT_EDGE + 2 * COL_SPACING);
+    float y = -1.0f + 2.5f * ROW_SPACING + (rand() % 4) * 0.5f * ROW_SPACING; // in player-ish band
+
+    float vx = fromLeft ? +SPIDER_SPEED_X : -SPIDER_SPEED_X;
+    float vy = (rand() % 3 - 1) * SPIDER_SPEED_Y; // -Y,0,+Y
+
+    spider = new Spider(vec2(x, y), vec2(vx, vy));
+
+    // next spawn in ~[6..12] seconds AFTER this one dies/leaves
+    spiderSpawnTimer = 6.0f + 6.0f * ((float)rand() / RAND_MAX);
+  }
+
+  if (spider)
+  {
+    spider->update(elapsedTime * speedMultiplier);
+
+    // If it goes off left/right, remove it
+    if (spider->pos.x < WORLD_LEFT_EDGE - 4 * COL_SPACING ||
+        spider->pos.x > WORLD_RIGHT_EDGE + 4 * COL_SPACING)
+    {
+      delete spider;
+      spider = NULL;
+    }
+  }
+
+  if (spider && (spider->pos - player->pos).length() < (spider->radius() + 0.35f * ROW_SPACING))
+  {
+    // same logic you use for centipede head killing player
+    chrono::system_clock::time_point t = chrono::system_clock::now();
+    t += chrono::duration<int>(PAUSE_TIME_FOR_MESSAGE);
+
+    playerDied = true;
+    pauseForMessage = true;
+    pauseUntil = t;
+
+    // remove spider so it doesn't keep colliding during the pause
+    delete spider;
+    spider = NULL;
+
+    return;
+  }
+
   // Move dart and check for it hitting something.  (Do this here as
   // it requires operating on World components.)
 
@@ -95,6 +148,7 @@ void World::updateState(float elapsedTime)
 
     float distanceTravelled = DART_SPEED * elapsedTime * speedMultiplier;
 
+    vec2 prevPos = darts[i]->pos; // Get old location of dart.
     darts[i]->pos = darts[i]->pos + vec2(0, distanceTravelled);
 
     // Check for dart going off the top
@@ -107,8 +161,8 @@ void World::updateState(float elapsedTime)
     }
 
     // See if there's a mushroom along the dart's path
-
-    Mushroom *closestMush = findClosestMushroomAhead(darts[i]->pos, vec2(0, 1), ROW_SPACING / 4);
+    vec2 dir(0, 1);
+    Mushroom *closestMush = findClosestMushroomAhead(prevPos, dir, ROW_SPACING / 4);
 
     if (closestMush)
     {
@@ -117,7 +171,11 @@ void World::updateState(float elapsedTime)
       // (approximated using the distance travelled in the last time
       // step)
 
-      if ((closestMush->pos - darts[i]->pos).length() < distanceTravelled)
+      vec2 v = closestMush->pos - prevPos;
+      float distAlongLine = v.x * dir.x + v.y * dir.y;
+      float distPerpToLine = fabs(v.x * dir.y - v.y * dir.x);
+
+      if (distAlongLine > 0 && distAlongLine < distanceTravelled && distPerpToLine < ROW_SPACING / 4)
       {
 
         closestMush->damage += 1;
@@ -127,6 +185,30 @@ void World::updateState(float elapsedTime)
           score += SCORE_DESTROY_MUSHROOM;
           mushrooms.remove(mushrooms.findIndex(closestMush));
         }
+
+        darts.remove(i);
+        i--;
+        continue;
+      }
+    }
+
+    if (spider)
+    {
+      // Use swept test this frame: from prevPos to prevPos + dir*distanceTravelled
+      vec2 dir(0, 1);
+      vec2 v = spider->pos - prevPos;
+
+      float distAlongLine = v.x * dir.x + v.y * dir.y;
+      float distPerpToLine = fabs(v.x * dir.y - v.y * dir.x);
+
+      if (distAlongLine > 0 &&
+          distAlongLine < distanceTravelled &&
+          distPerpToLine < spider->radius())
+      {
+        score += SCORE_DESTROY_SPIDER;
+
+        delete spider;
+        spider = NULL;
 
         darts.remove(i);
         i--;
@@ -150,8 +232,8 @@ void World::updateState(float elapsedTime)
 
         // Test segment/dart here
         // moving in direction 'dir' (unit length).
-        vec2 start = darts[i]->pos;
-        vec2 dir = vec2(0, 1).normalize(); // keep generic (works for any dir)
+        vec2 start = prevPos;
+        vec2 dir(0, 1);
         vec2 v = seg->pos - start;
 
         float distAlongLine = v.x * dir.x + v.y * dir.y;        // [YOUR CODE HERE]
@@ -174,9 +256,6 @@ void World::updateState(float elapsedTime)
       // the row/column points.
 
       vec2 pos = closestCent->segments[closestSegIndex]->pos;
-      ;
-      ;
-      ;
 
       int col = rint((pos.x - WORLD_LEFT_EDGE) / COL_SPACING - 1);
       int row = rint((WORLD_TOP_ROW - pos.y) / ROW_SPACING);
@@ -354,6 +433,9 @@ void World::draw()
 
   for (int i = 0; i < darts.size(); i++)
     darts[i]->draw(VP);
+
+  if (spider)
+    spider->draw(VP);
 
   // Show lives remaining in upper-left corner
 

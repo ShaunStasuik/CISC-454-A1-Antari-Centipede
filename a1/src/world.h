@@ -1,9 +1,7 @@
 // world.h
 
-
 #ifndef WORLD_H
 #define WORLD_H
-
 
 #include "headers.h"
 #include "main.h"
@@ -13,63 +11,67 @@
 #include "player.h"
 #include "dart.h"
 #include "worldDefs.h"
+#include "spider.h"
 
-
-class World {
+class World
+{
 
   GLFWwindow *window;
 
-  int  score;
-  int  numCols;
+  int score;
+  int numCols;
 
   bool playerDied;
   bool goToNextLevel;
-  
+
   bool pauseForMessage;
   chrono::system_clock::time_point pauseUntil;
 
-  seq<Centipede*> centipedes;
-  seq<Mushroom*>  mushrooms;
-  Player          *player;
-  seq<Dart*>      darts;
+  seq<Centipede *> centipedes;
+  seq<Mushroom *> mushrooms;
+  Player *player;
+  seq<Dart *> darts;
+  Spider *spider;
+  float spiderSpawnTimer;
 
-  Mushroom *highlightMushroom;  // mushroom to highlight (for debugging)
+  Mushroom *highlightMushroom; // mushroom to highlight (for debugging)
 
- public:
-
-  int  level;
-  int  livesRemaining;
+public:
+  int level;
+  int livesRemaining;
   bool gameOver;
-  
-  float l, r, b, t;  // coordinates of window edges
 
-  World( GLFWwindow *w ) {
-    initWorld( w );
+  float l, r, b, t; // coordinates of window edges
+
+  World(GLFWwindow *w)
+  {
+    initWorld(w);
   }
 
-  void initWorld( GLFWwindow *w );
-  
-  void initLevel() {
+  void initWorld(GLFWwindow *w);
+
+  void initLevel()
+  {
 
     // Start with one centipede.  With each new level, make the
     // centipede one segment shorter AND create a length-one centipede
 
     centipedes.clear();
-    
-    centipedes.add( new Centipede( MAX_CENTIPEDE_SEGMENTS - level, INIT_CENTIPEDE_POS, INIT_CENTIPEDE_DIR ) );
-    for (int i=0; i<level; i++) // might at centipedes on top of each other ... would be easy to fix.
-      centipedes.add( new Centipede( 1, 
-				     vec2( WORLD_LEFT_EDGE + (randIn01()*(numCols-1)+0.5)*COL_SPACING, INIT_CENTIPEDE_POS.y ),
-				     vec2( randIn01() > 0.5 ? 1 : -1, INIT_CENTIPEDE_DIR.y ) ) );
+
+    centipedes.add(new Centipede(MAX_CENTIPEDE_SEGMENTS - level, INIT_CENTIPEDE_POS, INIT_CENTIPEDE_DIR));
+    for (int i = 0; i < level; i++) // might at centipedes on top of each other ... would be easy to fix.
+      centipedes.add(new Centipede(1,
+                                   vec2(WORLD_LEFT_EDGE + (randIn01() * (numCols - 1) + 0.5) * COL_SPACING, INIT_CENTIPEDE_POS.y),
+                                   vec2(randIn01() > 0.5 ? 1 : -1, INIT_CENTIPEDE_DIR.y)));
     // One player
 
     if (!player)
-      player = new Player( INIT_PLAYER_POS );
+      player = new Player(INIT_PLAYER_POS);
     else
       player->pos = INIT_PLAYER_POS;
 
-    playerDied      = false;
-    goToNextLevel   = false;
+    playerDied = false;
+    goToNextLevel = false;
     pauseForMessage = false;
 
     // Start level with no darts, fleas, spiders
@@ -77,15 +79,15 @@ class World {
     darts.clear();
 
     // Set up the window
-    
+
     setWindowEdgeCoordinates();
   }
 
-  
-  void playerMove( vec2 pos ) {
+  void playerMove(vec2 pos)
+  {
 
     int winX, winY;
-    glfwGetWindowSize( window, &winX, &winY );
+    glfwGetWindowSize(window, &winX, &winY);
 
     // [YOUR CODE HERE]
     //
@@ -96,21 +98,21 @@ class World {
     float worldX = ((2.0f * pos.x) / winX) - 1.0f;
     float worldY = ((-2.0f * pos.y) / winY) + 1.0f;
 
-    player->moveTo( vec2( worldX, worldY ) );
+    player->moveTo(vec2(worldX, worldY));
   }
 
-  void playerFire() {
+  void playerFire()
+  {
 
     if (darts.size() < MAX_DARTS_AT_ONCE)
-      darts.add( new Dart( player->pos ) );
+      darts.add(new Dart(player->pos));
   }
 
   void draw();
-  void updateState( float elapsedTime );
+  void updateState(float elapsedTime);
   void setWindowEdgeCoordinates();
-  Mushroom *findClosestMushroomAhead( vec2 pos, vec2 dir, float maxPerpDist );
+  Mushroom *findClosestMushroomAhead(vec2 pos, vec2 dir, float maxPerpDist);
   int lowerMushroomCount();
 };
-
 
 #endif

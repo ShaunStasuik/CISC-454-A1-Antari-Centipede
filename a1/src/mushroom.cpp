@@ -7,8 +7,11 @@
 extern GLFWwindow *window;
 #define LINE_HALFWIDTH_IN_PIXELS 2.0
 
-seq<DrawBuffers> Mushroom::mushroomStates;
-// GLuint Mushroom::VAO = 0;
+DrawBuffers *Mushroom::db = NULL;
+DrawBuffers *Mushroom::maskDb = NULL;
+
+float Mushroom::baseY = 0.0f;
+float Mushroom::totalHeight = 0.0f;
 
 // Mushroom geometry
 
@@ -58,13 +61,36 @@ static void addThickArcStrip(seq<vec2> &positions, seq<vec3> &colours,
 {
   GLuint offset = positions.size();
 
-  for (float theta = 0.0f; theta <= (float)M_PI + 1e-6f; theta += (float)M_PI / (float)PIECES_PER_CIRCLE) {
-    positions.add( centre + vec2(rInner * cos(theta), rInner * sin(theta)) );
-    positions.add( centre + vec2(rOuter * cos(theta), rOuter * sin(theta)) );
+  for (float theta = 0.0f; theta <= (float)M_PI + 1e-6f; theta += (float)M_PI / (float)PIECES_PER_CIRCLE)
+  {
+    positions.add(centre + vec2(rInner * cos(theta), rInner * sin(theta)));
+    positions.add(centre + vec2(rOuter * cos(theta), rOuter * sin(theta)));
   }
 
   for (int i = offset; i < positions.size(); i++)
     colours.add(colour);
+}
+
+static void uploadInterleavedToBoundVBO(GLuint VBO, const seq<vec2> &positions, const seq<vec3> &colours)
+{
+  int numFloats = positions.size() * (2 + 3);
+  float *buffer = new float[numFloats];
+
+  float *p = buffer;
+  for (int i = 0; i < positions.size(); i++)
+  {
+    *p++ = positions[i].x;
+    *p++ = positions[i].y;
+    *p++ = colours[i].x;
+    *p++ = colours[i].y;
+    *p++ = colours[i].z;
+  }
+
+  glBindBuffer(GL_ARRAY_BUFFER, VBO);
+  glBufferData(GL_ARRAY_BUFFER, numFloats * sizeof(float), buffer, GL_STATIC_DRAW);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+  delete[] buffer;
 }
 
 void Mushroom::generateVAOs()
@@ -95,142 +121,123 @@ void Mushroom::generateVAOs()
   float lw = LINE_HALFWIDTH_IN_PIXELS / (float)height * 2.0f;
 
   // Properly size the mushrrom by tying it to the grid spacing.
-  float cell = COL_SPACING;      // 0.07
-  float R0   = 0.33f * cell;     // overall size reference
+  float R = 0.25f * COL_SPACING; // reduced radius, otherwise mushrooms look too large.
 
-  // Build VAO/VBO per damage state (0..MUSH_MAX_DAMAGE-1)
-  for (int d = 0; d < MUSH_MAX_DAMAGE; d++)
+  // Proportions (single model)
+  float capR = 0.95f * R;
+  float stemW = 0.60f * R;
+  float stemH = 0.85f * R;
+
+  // float R0 = 0.33f * cell;  // overall size reference
+
+  float stemBaseY = -R; // bottom of STEM FILL (not the visual bottom)
+  float stemTopY = stemBaseY + stemH;
+  float capCY = stemTopY + 0.20f * R;
+
+  // Make the mask start at the *visual* bottom (include outline thickness)
+  baseY = stemBaseY - lw;
+
+  // Make the mask tall enough to cover the *visual* top (include outline thickness)
+  float maskTopY = (capCY + capR) + lw;
+
+  // Total height that the mask must be able to cover
+  totalHeight = maskTopY - baseY;
+
+  vec3 capCol = MUSH_BODY_COLOUR;
+  vec3 stemCol = vec3(0.92f, 0.88f, 0.75f);
+  vec3 outCol = MUSH_OUTLINE_COLOUR;
+  vec3 black = vec3(0.0f, 0.0f, 0.0f);
+
   {
-    // Damage fraction t in [0,1]
-    float t = (MUSH_MAX_DAMAGE <= 1) ? 0.0f : (float)d / (float)(MUSH_MAX_DAMAGE - 1);
+    // ---- VAO/VBO setup (exactly like Dart) ----
+    GLuint VAO;
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
 
-    // Shape change with damage (cap shrinks more)
-    float capScale  = std::max(0.35f, 1.0f - 0.55f * t);
-    float stemScale = std::max(0.60f, 1.0f - 0.25f * t);
+    GLuint VBO;
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
-    // Dimensions
-    float R     = R0;
-    float capR  = 0.95f * R * capScale;
-    float stemW = 0.60f * R;
-    float stemH = 0.85f * R * stemScale;
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
+    glEnableVertexAttribArray(0);
 
-    // Local-space layout (stem under cap, centered at x=0)
-    float baseY    = -R;
-    float stemTopY = baseY + stemH;
-    float capCY    = stemTopY + 0.20f * R;
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 
-    vec3 capCol  = MUSH_BODY_COLOUR;
-    vec3 stemCol = vec3(0.92f, 0.88f, 0.75f);
-    vec3 outCol  = MUSH_OUTLINE_COLOUR;
+    glBindVertexArray(0);
 
+    db = new DrawBuffers(VAO);
 
-  // VAO and VBO setup.
-  GLuint VAO;
-  glGenVertexArrays(1, &VAO);
-  glBindVertexArray(VAO);
-
-  // Define the VBO
-
-  GLuint VBO;
-  glGenBuffers(1, &VBO);
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-  // Define the attributes
-
-  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0); // two floats for a position
-  glEnableVertexAttribArray(0);
-
-  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(2 * sizeof(float))); // three floats for a colour
-  glEnableVertexAttribArray(1);
-
-  // Stop setting up this VAO.
-
-  glBindVertexArray(0);
-
-  // Find line width 'lw' in world coordinate system
-
-  // int width, height;
-  // glfwGetFramebufferSize(window, &width, &height);
-  // float lw = LINE_HALFWIDTH_IN_PIXELS / (float)height * 2; // relies on top-bottom = 2 in WCS
-
-  // ---------------- Set up the mushroom geometry ----------------
-  //
-  // This dummy code just builds a small square centred at (0,0).
-  //
-  // [ YOUR CODE HERE ]
-
-    DrawBuffers db(VAO);
-
-    // CPU-side vertex lists
+    // CPU-side geometry buffers
     seq<vec2> positions;
     seq<vec3> colours;
-
     GLuint offset;
 
-    // ---------- 1) Stem fill (rectangle triangle fan) ----------
+    // ---- 1) STEM FILL (rectangle fan) ----
     {
       float x0 = -0.5f * stemW;
-      float x1 =  0.5f * stemW;
-      float y0 =  baseY;
-      float y1 =  stemTopY;
+      float x1 = 0.5f * stemW;
+      float y0 = stemBaseY; // Cover stem outline.
+      float y1 = stemTopY;
 
       offset = positions.size();
 
-      positions.add( vec2(0.0f, 0.5f*(y0+y1)) ); // center
-      positions.add( vec2(x0, y0) );
-      positions.add( vec2(x1, y0) );
-      positions.add( vec2(x1, y1) );
-      positions.add( vec2(x0, y1) );
-      positions.add( vec2(x0, y0) );             // close
+      positions.add(vec2(0.0f, 0.5f * (y0 + y1))); // center
+      positions.add(vec2(x0, y0));
+      positions.add(vec2(x1, y0));
+      positions.add(vec2(x1, y1));
+      positions.add(vec2(x0, y1));
+      positions.add(vec2(x0, y0)); // close
 
-      for (int i=offset; i<positions.size(); i++)
+      for (int i = offset; i < positions.size(); i++)
         colours.add(stemCol);
 
-      db.mode.add(GL_TRIANGLE_FAN);
-      db.first.add(offset);
-      db.count.add(positions.size() - offset);
+      db->mode.add(GL_TRIANGLE_FAN);
+      db->first.add(offset);
+      db->count.add(positions.size() - offset);
     }
 
-    // ---------- 2) Cap fill (semi-circle fan) ----------
+    // ---- 2) CAP FILL (semi-circle fan) ----
     {
       offset = positions.size();
-
       addSemiCircleFan(positions, colours, vec2(0.0f, capCY), capR, capCol);
 
-      db.mode.add(GL_TRIANGLE_FAN);
-      db.first.add(offset);
-      db.count.add(positions.size() - offset);
+      db->mode.add(GL_TRIANGLE_FAN);
+      db->first.add(offset);
+      db->count.add(positions.size() - offset);
     }
 
-    // ---------- 3) Stem outline (4 thick edges) ----------
+    // ---- 3) STEM OUTLINE (3 edges only: bottom, left, right) ----
+    // No top edge so you don't get an extra cyan band where cap meets stem.
     {
       float x0 = -0.5f * stemW;
-      float x1 =  0.5f * stemW;
-      float y0 =  baseY;
-      float y1 =  stemTopY;
+      float x1 = 0.5f * stemW;
+      float y0 = stemBaseY;
+      float y1 = stemTopY;
 
-      // bottom
+      // bottom edge
       offset = positions.size();
-      addThickSegment(positions, colours, vec2(x0,y0), vec2(x1,y0), lw, outCol);
-      db.mode.add(GL_TRIANGLE_STRIP); db.first.add(offset); db.count.add(positions.size()-offset);
+      addThickSegment(positions, colours, vec2(x0, y0), vec2(x1, y0), lw, outCol);
+      db->mode.add(GL_TRIANGLE_STRIP);
+      db->first.add(offset);
+      db->count.add(positions.size() - offset);
 
-      // right
+      // right edge
       offset = positions.size();
-      addThickSegment(positions, colours, vec2(x1,y0), vec2(x1,y1), lw, outCol);
-      db.mode.add(GL_TRIANGLE_STRIP); db.first.add(offset); db.count.add(positions.size()-offset);
+      addThickSegment(positions, colours, vec2(x1, y0), vec2(x1, y1), lw, outCol);
+      db->mode.add(GL_TRIANGLE_STRIP);
+      db->first.add(offset);
+      db->count.add(positions.size() - offset);
 
-      // top
+      // left edge
       offset = positions.size();
-      addThickSegment(positions, colours, vec2(x1,y1), vec2(x0,y1), lw, outCol);
-      db.mode.add(GL_TRIANGLE_STRIP); db.first.add(offset); db.count.add(positions.size()-offset);
-
-      // left
-      offset = positions.size();
-      addThickSegment(positions, colours, vec2(x0,y1), vec2(x0,y0), lw, outCol);
-      db.mode.add(GL_TRIANGLE_STRIP); db.first.add(offset); db.count.add(positions.size()-offset);
+      addThickSegment(positions, colours, vec2(x0, y1), vec2(x0, y0), lw, outCol);
+      db->mode.add(GL_TRIANGLE_STRIP);
+      db->first.add(offset);
+      db->count.add(positions.size() - offset);
     }
 
-    // ---------- 4) Cap outline (thick arc strip) ----------
+    // ---- 4) CAP OUTLINE (thick arc strip) ----
     {
       offset = positions.size();
 
@@ -239,141 +246,99 @@ void Mushroom::generateVAOs()
 
       addThickArcStrip(positions, colours, vec2(0.0f, capCY), rInner, rOuter, outCol);
 
-      db.mode.add(GL_TRIANGLE_STRIP);
-      db.first.add(offset);
-      db.count.add(positions.size() - offset);
+      db->mode.add(GL_TRIANGLE_STRIP);
+      db->first.add(offset);
+      db->count.add(positions.size() - offset);
     }
 
-    // ---------- Upload interleaved (x y r g b) to VBO ----------
-    int numFloats = positions.size() * (2 + 3);
-    float *buffer = new float[numFloats];
-
-    float *p = buffer;
-    for (int i=0; i<positions.size(); i++) {
-      *p++ = positions[i].x;
-      *p++ = positions[i].y;
-      *p++ = colours[i].x;
-      *p++ = colours[i].y;
-      *p++ = colours[i].z;
-    }
-
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, numFloats*sizeof(float), buffer, GL_STATIC_DRAW);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    delete [] buffer;
-
-    // Save this damage-state geometry
-    mushroomStates.add(db);
+    // ---- Upload interleaved data to the VBO ----
+    uploadInterleavedToBoundVBO(VBO, positions, colours);
   }
 
-  // int numVerts = 10;
-  // int numFloats = 5 * numVerts; // five attributes for each vertex
+  // ============================================================
+  // (B) Build the MASK VAO + DrawBuffers (maskDb)
+  // ============================================================
+  {
+    GLuint VAO;
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
 
-  // float *buffer = new float[numFloats];
+    GLuint VBO;
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
 
-  // int i = 0;
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
+    glEnableVertexAttribArray(0);
 
-  // // Vertex 1
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
 
-  // buffer[i++] = -0.015 + lw;
-  // buffer[i++] = -0.015 + lw;
+    glBindVertexArray(0);
 
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
+    maskDb = new DrawBuffers(VAO);
 
-  // buffer[i++] = -0.015 - lw;
-  // buffer[i++] = -0.015 - lw;
+    seq<vec2> positions;
+    seq<vec3> colours;
 
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
+    // Build one black rectangle fan that can cover the whole mushroom.
+    float maskW = 2.4f * capR;
+    float x0 = -0.5f * maskW;
+    float x1 = 0.5f * maskW;
 
-  // // Vertex 2
+    float y0 = baseY;
+    float y1 = baseY + totalHeight;
 
-  // buffer[i++] = +0.015 - lw;
-  // buffer[i++] = -0.015 + lw;
+    GLuint offset = positions.size();
 
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
+    positions.add(vec2(0.0f, 0.5f * (y0 + y1))); // center
+    positions.add(vec2(x0, y0));
+    positions.add(vec2(x1, y0));
+    positions.add(vec2(x1, y1));
+    positions.add(vec2(x0, y1));
+    positions.add(vec2(x0, y0));
 
-  // buffer[i++] = +0.015 + lw;
-  // buffer[i++] = -0.015 - lw;
+    for (int i = offset; i < positions.size(); i++)
+      colours.add(black);
 
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
+    maskDb->mode.add(GL_TRIANGLE_FAN);
+    maskDb->first.add(offset);
+    maskDb->count.add(positions.size() - offset);
 
-  // // Vertex 3
-
-  // buffer[i++] = +0.015 - lw;
-  // buffer[i++] = +0.015 - lw;
-
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
-
-  // buffer[i++] = +0.015 + lw;
-  // buffer[i++] = +0.015 + lw;
-
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
-
-  // // Vertex 4
-
-  // buffer[i++] = -0.015 + lw;
-  // buffer[i++] = +0.015 - lw;
-
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
-
-  // buffer[i++] = -0.015 - lw;
-  // buffer[i++] = +0.015 + lw;
-
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
-
-  // // and back to Vertex 1
-
-  // buffer[i++] = -0.015 + lw;
-  // buffer[i++] = -0.015 + lw;
-
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
-
-  // buffer[i++] = -0.015 - lw;
-  // buffer[i++] = -0.015 - lw;
-
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.x;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.y;
-  // buffer[i++] = MUSH_OUTLINE_COLOUR.z;
-
-  // glBufferData(GL_ARRAY_BUFFER, numFloats * sizeof(float), buffer, GL_STATIC_DRAW);
-
-  // glBindBuffer(GL_ARRAY_BUFFER, 0);
+    uploadInterleavedToBoundVBO(VBO, positions, colours);
+  }
 }
 
 void Mushroom::draw(mat4 &worldToViewTransform)
 {
-  // Destroyed mushrooms should not be drawn
-  if (damage >= MUSH_MAX_DAMAGE)
-    return;
-
-  // Clamp damage for safety
-  int d = std::max(0, std::min(damage, MUSH_MAX_DAMAGE - 1));
-
-  // MVP exactly like Dart
+  // Provide base translation for this mushroom instance
   mat4 T = translate(pos.x, pos.y, 0.0f);
-  mat4 MVP = worldToViewTransform * T;
 
-  gpuProg->setMat4("MVP", MVP);
+  // Draw the normal mushroom.
+  {
+    mat4 MVP = worldToViewTransform * T;
+    gpuProg->setMat4("MVP", MVP);
+    db->draw();
+  }
 
-  // Draw the correct geometry for this damage state
-  mushroomStates[d].draw();
+  // 2) Draw damage mask (black rectangle coming from below).
+  float maskFrac = 0.0f;
+
+  if (MUSH_MAX_DAMAGE > 0)
+    maskFrac = damage / (float)MUSH_MAX_DAMAGE;
+
+  // Manually cap to [0,1]
+  if (maskFrac < 0.0f)
+    maskFrac = 0.0f;
+  if (maskFrac > 1.0f)
+    maskFrac = 1.0f;
+
+  if (maskFrac > 0.0f)
+  {
+    mat4 M = T * translate(0.0f, baseY, 0.0f) * scale(1.0f, maskFrac, 1.0f) * translate(0.0f, -baseY, 0.0f);
+
+    mat4 MVP = worldToViewTransform * M;
+    gpuProg->setMat4("MVP", MVP);
+
+    maskDb->draw();
+  }
 }
